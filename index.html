@@ -230,6 +230,33 @@
             }, 1000); // ทำงานทุกๆ 1,000 มิลลิวินาที (1 วินาที)
         }
 
+        function createCameraPopup(id) {
+    // ในที่นี้สมมติว่าคุณมีลิงก์ Stream ของกล้อง (เปลี่ยน URL ตรงนี้ได้)
+    // การใช้ iframe เหมาะสำหรับการแสดงผล YouTube Live หรือ Embed Stream ทั่วไป
+    const cameraUrl = "https://www.youtube.com/embed/live_stream?channel=YOUR_CHANNEL_ID"; 
+    
+    return `
+        <div style="text-align:center; min-width: 250px;">
+            <h4 style="margin:5px 0;">รถ: ${id}</h4>
+            <div style="background:black; width:100%; height:150px; display:flex; align-items:center; justify-content:center; color:white;">
+                <iframe width="100%" height="150" src="${cameraUrl}" frameborder="0" allowfullscreen></iframe>
+            </div>
+            <p style="font-size:0.8rem; margin-top:5px; color:#555;">กำลังเชื่อมต่อกล้องสด...</p>
+        </div>
+    `;
+}
+
+// ในฟังก์ชัน startSimulation (หรือจุดที่สร้าง Marker) ให้ผูก Popup เข้าไป
+// แก้ไขส่วนนี้ในฟังก์ชัน startSimulation:
+if (!vehicleMarker) {
+    vehicleMarker = L.marker([carPos.lat, carPos.lng], { icon: createCarIcon(currentHeading) }).addTo(map);
+    // ผูก Popup ที่เรียกฟังก์ชัน createCameraPopup
+    vehicleMarker.bindPopup(createCameraPopup("V-001"));
+} else {
+    vehicleMarker.setLatLng([carPos.lat, carPos.lng]);
+    vehicleMarker.setIcon(createCarIcon(currentHeading));
+}
+
         // 3. ฟังก์ชันสร้างไฟล์ .txt และสั่งดาวน์โหลดเมื่อกดปุ่ม
         document.getElementById('download-btn').addEventListener('click', () => {
             if (locationLogs.length <= 1) {
