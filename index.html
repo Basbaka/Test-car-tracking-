@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบติดตามรถ: รองรับมือถือและคอมพิวเตอร์</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <style>
+        body { margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; height: 100vh; background-color: #f4f6f9; overflow: hidden; }
+        
+        /* สไตล์ปุ่มเปิดเมนู (ลอยอยู่บนแผนที่) */
+        .toggle-btn {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            z-index: 2000;
+            background-color: #2c3e50;
+            color: white;
+            border: none;
+            width: 48px;
+            height: 48px;
+            border-radius: 8px;
+            font-size: 1.5rem;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: background 0.2s, transform 0.2s;
+        }
+        .toggle-btn:hover { background-color: #34495e; transform: scale(1.05); }
+
+        /* แถบด้านข้าง */
+        #sidebar { 
+            width: 340px; 
+            min-width: 340px;
+            background-color: white; 
+            box-shadow: 2px 0 10px rgba(0,0,0,0.15); 
+            display: flex; 
+            flex-direction: column; 
+            z-index: 3000; 
+            transition: transform 0.3s ease, margin-left 0.3s ease;
+            position: relative;
+        }
+
+        /* สถานะเมื่อเมนูถูกยุบ */
+        #sidebar.collapsed {
+            margin-left: -340px; /* ดึงเมนูซ่อนไปทางซ้าย */
+        }
+
+        .header { 
+            padding: 20px; 
+            background-color: #1e272e; 
+            color: white; 
+            text-align: center; 
+            position: relative;
+        }
+
+        /* ปุ่มปิดเมนู (อยู่มุมขวาบนของ Sidebar) */
+        .close-btn {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            color: white;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            font-size: 1rem;
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: background 0.2s;
+        }
+        .close-btn:hover { background: rgba(255, 255, 255, 0.4); }
+
+        .vehicle-item { padding: 15px 20px; border-bottom: 1px solid #f1f2f6; display: flex; align-items: center; justify-content: space-between; background-color: #eaf2f8; border-left: 4px solid #3498db; }
+        .vehicle-info { display: flex; flex-direction: column; }
+        .vehicle-type-label { font-size: 0.75rem; color: #7f8c8d; margin-top: 2px; }
+        .status-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; box-shadow: 0 0 5px rgba(0,0,0,0.1); }
+        .status-moving { background-color: #0be881; }
+        .status-stopped { background-color: #ff3f34; }
+        .trip-info { padding: 15px 20px; background-color: #f8f9fa; font-size: 0.85rem; color: #2c3e50; line-height: 1.8; flex-grow: 1; overflow-y: auto; }
+        
+        .btn-download { width: 100%; padding: 12px; background-color: #27ae60; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; margin-top: 20px; font-size: 0.9rem; transition: background 0.2s; }
+        .btn-download:hover { background-color: #2ecc71; }
+        .btn-download:disabled { background-color: #bdc3c7; cursor: not-allowed; }
+
+        /* แผนที่ */
+        #map-container { position: relative; flex-grow: 1; height: 100%; }
+        #map { width: 100%; height: 100%; }
+        
+        .vehicle-icon-svg { filter: drop-shadow(0px 3px 4px rgba(0,0,0,0.4)); }
+
+        /* ปรับปรุงเมื่ออยู่บนหน้าจอมือถือ (ความกว้างน้อยกว่า 768px) */
+        @media (max-width: 768px) {
+            #sidebar {
+                position: absolute; /* ลอยทับแผนที่ */
+                height: 100%;
+                width: 85%; /* ใช้พื้นที่ 85% ของจอ */
+                min-width: auto;
+                max-width: 340px;
+                box-shadow: 5px 0 15px rgba(0,0,0,0.3);
+            }
+            #sidebar.collapsed {
+                transform: translateX(-100%);
+                margin-left: 0;
+            }
+            /* ขยับปุ่ม Zoom ของ Leaflet ลงมาไม่ให้ทับปุ่มเมนู */
+            .leaflet-top.leaflet-right { top: 60px !important; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="sidebar">
+        <div class="header">
+            <h2 style="margin: 0; font-size: 1.2rem; letter-spacing: 1px;">ระบบติดตามรถ</h2>
+            <button class="close-btn" onclick="toggleSidebar()" title="ซ่อนเมนู">✖</button>
+        </div>
+        <div class="vehicle-item">
+            <div class="vehicle-info">
+                <span style="font-weight: bold; color: #2c3e50;">รถยนต์ VIP (V-001)</span>
+                <span class="vehicle-type-label">ศรีราชา ➔ ถนนสุขุมวิท ➔ อโศก</span>
+            </div>
+            <span class="status-dot status-moving" id="status-indicator"></span>
+        </div>
+        <div class="trip-info">
+            <b>ข้อมูลการเดินทางแบบเรียลไทม์:</b><br>
+            ความเร็วรถ: <span id="speed-display" style="font-weight:bold; color:#2980b9;">100</span> กม./ชม.<br>
+            สถานะ: <span id="text-status" style="color: #0be881; font-weight:bold;">กำลังดึงข้อมูลเส้นทาง...</span><br>
+            <hr style="border: 0; border-top: 1px solid #ddd; margin: 15px 0;">
+            <b>ระบบบันทึกพิกัด (Log):</b><br>
+            จำนวนข้อมูล: <span id="log-count" style="color:#e67e22; font-weight:bold;">0</span> record(s)<br>
+            
+            <button id="download-btn" class="btn-download" disabled>📥 ดาวน์โหลดไฟล์ .txt</button>
+        </div>
+    </div>
+
+    <div id="map-container">
+        <button id="toggle-btn" class="toggle-btn" onclick="toggleSidebar()" title="เปิดเมนู">☰</button>
+        <div id="map"></div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script>
+        // --- 1. ระบบจัดการเมนู (Sidebar Toggle) ---
+        const sidebar = document.getElementById('sidebar');
+        
+        function toggleSidebar() {
+            sidebar.classList.toggle('collapsed');
+            
+            // สั่งให้แผนที่อัปเดตขนาดตัวเอง หลังจากเมนูหด/ขยายเสร็จ (0.3 วินาที)
+            setTimeout(() => {
+                map.invalidateSize();
+            }, 300);
+        }
+
+        // ตรวจจับขนาดหน้าจอ ถ้าเป็นมือถือให้ยุบเมนูตั้งแต่เริ่ม
+        if (window.innerWidth <= 768) {
+            sidebar.classList.add('collapsed');
+        }
+
+        // --- 2. ระบบแผนที่และการติดตามรถ ---
+        const map = L.map('map', { zoomControl: false }).setView([13.1627, 100.9265], 16);
+        L.control.zoom({ position: 'topright' }).addTo(map);
+
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+            attribution: '© OpenStreetMap contributors', maxZoom: 19
+        }).addTo(map);
+
+        const waypoints = [
+            "100.9300,13.1667", "100.9238,13.2847", "100.9785,13.3644", 
+            "101.0029,13.5435", "100.5966,13.5959", "100.6095,13.6705", "100.5606,13.7368"
+        ].join(";");
+
+        let routeCoords = [], currentRouteIndex = 0, carPos = null;
+        let vehicleMarker = null, fullRoutePolyline = null, passedPolyline = null;
+        let passedCoords = [], isDriving = false, currentHeading = 0;
+        const locationLogs = [];
+
+        function createCarIcon(heading) {
+            const svgContent = `
+                <svg class="vehicle-icon-svg" viewBox="0 0 24 24" width="36" height="36">
+                    <rect x="4" y="2" width="16" height="20" rx="4" fill="#00a8ff"/>
+                    <path d="M5.5,7 L18.5,7 L17,14 L7,14 Z" fill="#2f3640"/>
+                    <rect x="6" y="8" width="12" height="5" rx="1" fill="#00a8ff"/>
+                    <rect x="5" y="2" width="3" height="1.5" rx="0.5" fill="#fbc531"/>
+                    <rect x="16" y="2" width="3" height="1.5" rx="0.5" fill="#fbc531"/>
+                    <rect x="5" y="20.5" width="3" height="1.5" rx="0.5" fill="#e84118"/>
+                    <rect x="16" y="20.5" width="3" height="1.5" rx="0.5" fill="#e84118"/>
+                    <path d="M4,9 L2,10 L4,11 Z" fill="#00a8ff"/>
+                    <path d="M20,9 L22,10 L20,11 Z" fill="#00a8ff"/>
+                </svg>
+            `;
+            return L.divIcon({
+                className: 'vehicle-icon-container',
+                html: `<div style="transform: rotate(${heading}deg);">${svgContent}</div>`,
+                iconSize: [40, 40], iconAnchor: [20, 20]
+            });
+        }
+
+        async function fetchRealRoute() {
+            try {
+                const url = `https://router.project-osrm.org/route/v1/driving/${waypoints}?geometries=geojson&overview=full`;
+                const response = await fetch(url);
+                const data = await response.json();
+
+                routeCoords = data.routes[0].geometry.coordinates.map(coord => L.latLng(coord[1], coord[0]));
+                fullRoutePolyline = L.polyline(routeCoords, { color: '#bdc3c7', weight: 5, opacity: 0.5 }).addTo(map);
+                passedPolyline = L.polyline([], { color: '#9b59b6', weight: 5, opacity: 0.9 }).addTo(map);
+
+                carPos = routeCoords[0];
+                document.getElementById('text-status').innerText = "กำลังวิ่งบนถนนสุขุมวิท...";
+                document.getElementById('download-btn').disabled = false; 
+                locationLogs.push("Timestamp,Latitude,Longitude,Speed_kmh,Heading_deg");
+                
+                isDriving = true;
+                startSimulation();
+                startLogging(); 
+            } catch (error) {
+                document.getElementById('text-status').innerText = "เกิดข้อผิดพลาดในการโหลดเส้นทาง";
+                document.getElementById('text-status').style.color = "#e74c3c";
+            }
+        }
+
+        function getPointAtDistance(p1, p2, distMeter) {
+            const totalDist = map.distance(p1, p2);
+            if (totalDist === 0) return p1;
+            const ratio = distMeter / totalDist;
+            return L.latLng(p1.lat + (p2.lat - p1.lat) * ratio, p1.lng + (p2.lng - p1.lng) * ratio);
+        }
+
+        function calculateHeading(p1, p2) {
+            let heading = Math.atan2(p2.lng - p1.lng, p2.lat - p1.lat) * (180 / Math.PI);
+            return (heading >= 0) ? heading : heading + 360;
+        }
+
+        function startSimulation() {
+            const speedMetersPerSecond = 100 * (1000 / 3600); 
+            const tickRateMs = 50; 
+
+            setInterval(() => {
+                if (!isDriving) return;
+
+                let distanceToMove = speedMetersPerSecond * (tickRateMs / 1000);
+
+                while (distanceToMove > 0 && currentRouteIndex < routeCoords.length - 1) {
+                    let nextPoint = routeCoords[currentRouteIndex + 1];
+                    let distToNext = map.distance(carPos, nextPoint);
+
+                    if (distanceToMove < distToNext) {
+                        currentHeading = calculateHeading(carPos, nextPoint);
+                        carPos = getPointAtDistance(carPos, nextPoint, distanceToMove);
+                        distanceToMove = 0; 
+                    } else {
+                        distanceToMove -= distToNext;
+                        currentRouteIndex++;
+                        carPos = routeCoords[currentRouteIndex];
+                    }
+                }
+
+                if (currentRouteIndex >= routeCoords.length - 1) {
+                    isDriving = false;
+                    document.getElementById('speed-display').innerText = "0";
+                    document.getElementById('text-status').innerText = "ถึงจุดหมายเรียบร้อย";
+                    document.getElementById('text-status').style.color = "#ff3f34";
+                    document.getElementById('status-indicator').className = "status-dot status-stopped";
+                }
+
+                passedCoords.push([carPos.lat, carPos.lng]);
+                if(passedCoords.length > 2000) passedCoords.shift(); 
+                passedPolyline.setLatLngs(passedCoords);
+
+                if (!vehicleMarker) {
+                    vehicleMarker = L.marker([carPos.lat, carPos.lng], { icon: createCarIcon(currentHeading) }).addTo(map);
+                } else {
+                    vehicleMarker.setLatLng([carPos.lat, carPos.lng]);
+                    vehicleMarker.setIcon(createCarIcon(currentHeading));
+                }
+
+                map.panTo([carPos.lat, carPos.lng]); 
+            }, tickRateMs);
+        }
+
+        function startLogging() {
+            setInterval(() => {
+                if (!isDriving || !carPos) return;
+                const now = new Date().toISOString(); 
+                locationLogs.push(`${now},${carPos.lat.toFixed(6)},${carPos.lng.toFixed(6)},100,${currentHeading.toFixed(2)}`);
+                document.getElementById('log-count').innerText = locationLogs.length - 1; 
+            }, 1000); 
+        }
+
+        document.getElementById('download-btn').addEventListener('click', () => {
+            if (locationLogs.length <= 1) return alert("ยังไม่มีข้อมูลพิกัดให้บันทึก");
+            const blob = new Blob([locationLogs.join('\n')], { type: 'text/plain;charset=utf-8' });
+            const downloadLink = document.createElement('a');
+            downloadLink.href = URL.createObjectURL(blob);
+            downloadLink.download = `truck_tracking_log_${new Date().toISOString().replace(/[:.]/g, '-').slice(0,19)}.txt`;
+            document.body.appendChild(downloadLink);
+            downloadLink.click();
+            document.body.removeChild(downloadLink);
+        });
+
+        fetchRealRoute();
+    </script>
+</body>
+</html>
