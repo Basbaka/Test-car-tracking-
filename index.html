@@ -140,6 +140,7 @@
                 
                 isDriving = true;
                 startSimulation();
+                createCameraPopup("V-001")
                 startLogging(); // เรียกใช้ฟังก์ชันเก็บข้อมูล
             } catch (error) {
                 document.getElementById('text-status').innerText = "เกิดข้อผิดพลาดในการโหลดเส้นทาง";
