@@ -233,7 +233,7 @@
         function createCameraPopup(id) {
     // ในที่นี้สมมติว่าคุณมีลิงก์ Stream ของกล้อง (เปลี่ยน URL ตรงนี้ได้)
     // การใช้ iframe เหมาะสำหรับการแสดงผล YouTube Live หรือ Embed Stream ทั่วไป
-    const cameraUrl = "https://www.youtube.com/watch?v=TTIxshuinb8"; 
+    const cameraUrl = "https://www.youtube.com/embed/live_stream?channel=YOUR_CHANNEL_ID"; 
     
     return `
         <div style="text-align:center; min-width: 250px;">
@@ -244,6 +244,30 @@
             <p style="font-size:0.8rem; margin-top:5px; color:#555;">กำลังเชื่อมต่อกล้องสด...</p>
         </div>
     `;
+}
+
+// ในฟังก์ชัน startSimulation (หรือจุดที่สร้าง Marker) ให้ผูก Popup เข้าไป
+// แก้ไขส่วนนี้ในฟังก์ชัน startSimulation:
+if (!vehicleMarker) {
+    vehicleMarker = L.marker([carPos.lat, carPos.lng], { icon: createCarIcon(currentHeading) }).addTo(map);
+    // ผูก Popup ที่เรียกฟังก์ชัน createCameraPopup
+    vehicleMarker.bindPopup(createCameraPopup("V-001"));
+} else {
+    vehicleMarker.setLatLng([carPos.lat, carPos.lng]);
+    vehicleMarker.setIcon(createCarIcon(currentHeading));
+}
+
+     
+
+// ในฟังก์ชัน startSimulation (หรือจุดที่สร้าง Marker) ให้ผูก Popup เข้าไป
+// แก้ไขส่วนนี้ในฟังก์ชัน startSimulation:
+if (!vehicleMarker) {
+    vehicleMarker = L.marker([carPos.lat, carPos.lng], { icon: createCarIcon(currentHeading) }).addTo(map);
+    // ผูก Popup ที่เรียกฟังก์ชัน createCameraPopup
+    vehicleMarker.bindPopup(createCameraPopup("V-001"));
+} else {
+    vehicleMarker.setLatLng([carPos.lat, carPos.lng]);
+    vehicleMarker.setIcon(createCarIcon(currentHeading));
 }
 
 // ในฟังก์ชัน startSimulation (หรือจุดที่สร้าง Marker) ให้ผูก Popup เข้าไป
